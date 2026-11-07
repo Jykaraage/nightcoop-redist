@@ -1,0 +1,11 @@
+/.cache/
+/backups/
+/local/
+/config.local.json
+*.log
+*.dmp
+*.zip
+*.dll
+*.exe
+*.asi
+*.sav
