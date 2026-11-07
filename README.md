@@ -1,82 +1,72 @@
-# Cyberpunk 2077 / NightCoop
+# nightcoop-redist
 
-このフォルダは、NightCoopの導入情報・固定バージョン・管理スクリプトを置くローカルGit repoです。
-ゲーム本体、MODバイナリ、セーブ、招待コード、バックアップはGitに含めません。
+一緒に遊ぶメンバー向けの **NightCoop導入キット** です。Windows標準のPowerShellで動き、Gitのインストールは不要です。
+各PCのCyberpunk 2077を検出し、公式から同じMODをダウンロード・検証・バックアップして導入します。
 
-## 起動
-
-`Start-NightCoop.cmd` をダブルクリックします。ゲーム本体を直接起動し、ゲーム更新やMODファイルの変更があれば起動前に停止します。Steamは起動した状態で使ってください。
-専用ランチャーは不要です。ゲームのメインメニューの **Co-op** から操作します。
-
-- ホスト: **Host a session** → セーブまたは新規ゲーム → 招待コードを共有。
-- 参加者: **Join by code** → 招待コードを入力。
-- 一緒に遊ぶ全員が **NightCoop 0.2.0-beta / protocol 164** を使ってください。
-
-セッションの作成・他のプレイヤーとの接続は、ゲーム内で行います。[公式ガイド](https://nightcoop.net/docs.html)
-
-## このPCの構成
-
-| 項目 | 設定 |
+| 全員で合わせるもの | 固定値 |
 | --- | --- |
-| ゲーム | Steam版 Cyberpunk 2077 **2.5** |
-| 本体 | `I:\steamlibrary\steamapps\common\Cyberpunk 2077` |
-| DLC | Phantom Liberty 導入済み |
-| NightCoop | **0.2.0-beta** / protocol **164** / build `a3ea83df` |
-| 同梱ローダー | RED4ext **1.31.0** |
-| 既存MOD | 2020〜2021年の旧Cyber Engine Tweaksはバックアップ後に無効化 |
-| 確認日 | 2026-11-07（日本時間） |
+| Cyberpunk 2077 | **2.5**（Windows / Steam・GOG・Epic） |
+| NightCoop | **0.2.0-beta** |
+| 通信protocol | **164** |
+| 同梱RED4ext | **1.31.0** |
 
-## 管理コマンド
+## メンバーの導入手順
 
-このフォルダでPowerShellを開いて実行します。管理者権限は通常不要ですが、ゲームフォルダへの書き込み権限は必要です。
+1. [このrepo](https://github.com/Jykaraage/nightcoop-redist)の **Code → Download ZIP** をダウンロードし、ZIPを**すべて展開**します。ゲーム本体とは別の、書き込み可能なフォルダに置いてください。
+2. ゲームを終了し、展開先の **`Setup-NightCoop.cmd`** をダブルクリックします。ゲームの場所が見つからなければ、画面の案内に沿ってパスを入力します。
+3. `Setup complete` または `Already installed and verified` と表示されたら完了。**`Start-NightCoop.cmd`** から起動します。ストアのクライアントは起動しておいてください。
+
+初回は公式サイトへの通信が必要です。ゲーム本体は各自で用意してください。ゲーム版が2.5以外なら停止し、自動で更新・ダウングレードしません。
+セーブがまだないPCでも導入できます。ダウンロード後にゲームを勝手に起動することはありません。
+
+このrepoは非公開です。GitHubで取得するにはrepoへのアクセス権が必要です。メンバーに直接ZIPを渡す場合は、後述の配布パッケージを使えます。
+
+## 一緒に遊ぶ
+
+メインメニューの **Co-op** を使います。
+
+- ホスト: **Host a session** → セーブまたは新規ゲームを選択 → 招待コードをメンバーに伝える。
+- 参加者: **Join by code** → 招待コードを入力。
+- 全員が上の固定バージョンを使う。新しい版への更新はグループ内で合わせる。
+
+操作の詳細は[公式ガイド](https://nightcoop.net/docs.html)を参照してください。Beta版のため、最初の接続確認には新規または試験用のセーブをおすすめします。
+
+## 同梱コマンド
+
+| ファイル | 用途 |
+| --- | --- |
+| `Setup-NightCoop.cmd` | 自動検出・PCごとの設定保存・導入。導入済みなら再検証 |
+| `Start-NightCoop.cmd` | バージョンとファイルの検証後にゲーム起動 |
+| `Check-NightCoop.cmd` | 導入済みファイルとゲーム更新の確認 |
+| `Restore-NightCoop.cmd` | 導入前のMOD構成に復元。セーブは上書きしない |
+
+ゲームやセーブの場所を指定する場合は、PowerShellからも実行できます。
 
 ```powershell
-# ファイル・バージョン検証
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-Setup.ps1
+.\Setup-NightCoop.cmd -GamePath "D:\Games\Cyberpunk 2077"
 
-# 導入前プレビュー（導入済みの場合は再導入を拒否）
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-NightCoop.ps1 -WhatIf
+# セーブ場所を変更している場合のみ指定
+.\Setup-NightCoop.cmd -GamePath "D:\Games\Cyberpunk 2077" -SavePath "D:\My Saves\Cyberpunk 2077"
 
-# 導入（公式ZIPをSHA-256照合、セーブと上書き対象をバックアップ）
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-NightCoop.ps1
-
-# 導入ファイルを戻す。先に -WhatIf で確認可能
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Restore-NightCoop.ps1 -WhatIf
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Restore-NightCoop.ps1
+# 設定だけ保存し、ゲーム本体は変更しない
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Setup-NightCoop.ps1 -ConfigureOnly
 ```
 
-`ExecutionPolicy Bypass` はこのコマンドのプロセスだけに適用されます。
-導入スクリプトはゲーム起動中の実行を拒否します。セーブのバックアップも完了・照合してからゲーム内のファイルを書き換えます。
-復元はこのrepoが記録したファイルだけを対象にし、後から内容が変わったファイルがあれば停止します。
-このPCの初回導入では `-DisableLegacyCet` を付けて旧 `version.dll` と `cyber_engine_tweaks.asi` をバックアップ・無効化しました。通常の導入ではCETに触れません。復元すると、この旧CETも元に戻るので再起動前に注意してください。
+CMDはプロセス単位の `ExecutionPolicy Bypass` を使います。Windows全体の設定は変更しません。
+セーブや招待コード、ログをメンバーに配る必要はありません。
 
-## ファイルとバックアップ
+## 配布する人へ
 
-- `nightcoop.lock.json`: 公式配布URL・SHA-256・対象ゲーム版を固定。
-- `config.local.json`: このPCのゲーム/セーブパス。Git対象外。別PCでは `config.example.json` をコピーして編集。
-- `local/installation.json`: 導入ファイル一覧、個別ハッシュ、バックアップ先。Git対象外。
-- `backups/<日時-ID>/saves/`: 導入前のセーブ。復元スクリプトはセーブを上書きしません。
-- `backups/<日時-ID>/originals/`: 導入前から存在した上書き対象ファイル。
-- `backups/<日時-ID>/disabled/`: 無効化した旧CETの2ファイル。
-- `.cache/`: 公式ZIPと配布一覧。Git対象外。
-- [導入・動作確認記録](docs/installation.md)
+このrepoを共有するか、次のコマンドで導入キットだけのZIPを作成します。ZIPを作る側にもGitは不要です。
 
-セーブを戻す必要があるときはゲームを終了し、現在のセーブも別に保存してからバックアップを戻してください。
-Steam Cloudによる再同期にも注意してください。
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Package.ps1
+```
 
-## 更新するとき
+`dist/NightCoop-Setup-0.2.0-beta.zip` とSHA-256ファイルが生成されます。
+配布ZIPは明示した管理ファイルだけを収録し、PCごとの設定・バックアップ・ログ・MODバイナリ・Git履歴を含めません。
+MOD本体は受け取った人のPCで[公式サイト](https://nightcoop.net/download.html)から取得します。
 
-1. [公式配布ページ](https://nightcoop.net/download.html)と[配布一覧](https://nightcoop.net/releases.json)で、ゲーム版・撤回有無・SHA-256を確認。
-2. 一緒に遊ぶ人と導入バージョンを合わせ、現在の導入を `Restore-NightCoop.ps1` で戻す。
-3. `nightcoop.lock.json` のURL・サイズ・SHA-256・ゲーム版・protocolを更新して再導入。
-4. `Test-Setup.ps1` とゲーム内Co-opメニューを確認し、記録を更新してコミット。
+詳細: [導入と復元](docs/installation.md) / [配布・更新方針](docs/distribution.md) / [第三者のソフトウェア](THIRD-PARTY-NOTICES.md)
 
-自動で最新版に追従しません。ゲームが更新されたら、対応版を確認してから更新します。
-
-## 調子が悪いとき
-
-Co-opが出ない場合は `red4ext\logs\red4ext-*.log` でプラグインの読み込み状況を確認します。
-NightCoopのログはゲーム本体の `red4ext\logs` と `red4ext\plugins\NightCoop\logs` に出ます。[公式トラブル対応](https://nightcoop.net/docs.html#logs)
-
-導入ZIPに含まれる `r6\scripts\NightCoopFlight` も同時に管理します。NightCoopのために追加のCETやredscriptを自動導入しません。
-Gitのリモートは未設定です。
+このキットのスクリプトと説明書は[MIT License](LICENSE)です。NightCoopおよびCyberpunk 2077のライセンスを付与するものではありません。

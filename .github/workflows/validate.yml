@@ -1,0 +1,22 @@
+name: Validate Windows setup kit
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Test isolated setup and restore
+        shell: powershell
+        run: .\tests\Smoke.Tests.ps1
+      - name: Build member package
+        shell: powershell
+        run: .\scripts\Build-Package.ps1

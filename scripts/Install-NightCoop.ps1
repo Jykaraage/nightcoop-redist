@@ -30,13 +30,46 @@ if (-not (Test-Path -LiteralPath $archive)) {
     if ($WhatIfPreference) { Write-Output "Would download and verify $($lock.url), then back up and install into $gameRoot"; return }
     $uri = [Uri]$lock.url
     if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'nightcoop.net') { throw 'Unexpected download origin in lock.' }
+    $manifestUri = [Uri]$lock.manifestUrl
+    if ($manifestUri.Scheme -ne 'https' -or $manifestUri.Host -ne 'nightcoop.net') { throw 'Unexpected manifest origin in lock.' }
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $manifest = Invoke-RestMethod -Uri $manifestUri.AbsoluteUri -TimeoutSec 30 -DisableKeepAlive
+    $demo = $manifest.PSObject.Properties['demo']
+    if ($demo -and $demo.Value) { throw 'The official release manifest contains demo data.' }
+    $releases = @($manifest.releases | Where-Object { $_.version -eq $lock.version -and -not $_.yanked })
+    if ($releases.Count -ne 1) { throw 'The pinned release is missing or withdrawn on the official site.' }
+    $officialFiles = @($releases[0].files | Where-Object { $_.kind -eq 'mod' -and $_.name -eq $lock.fileName })
+    if ($officialFiles.Count -ne 1) { throw 'The pinned archive is missing from the official manifest.' }
+    $official = $officialFiles[0]
+    $officialUrl = [Uri]::new($manifestUri, [string]$official.url).AbsoluteUri
+    if ($official.sha256 -ne $lock.sha256 -or $official.size -ne $lock.size -or $officialUrl -ne $uri.AbsoluteUri) {
+        throw 'Official archive metadata changed. Ask the group maintainer to review the lock.'
+    }
     New-Item -ItemType Directory -Path (Split-Path -Parent $archive) -Force | Out-Null
-    Invoke-WebRequest -Uri $uri.AbsoluteUri -OutFile $archive -UseBasicParsing
+    $partial = $archive + '.partial'
+    Write-Host "Downloading NightCoop $($lock.version) from the official site ..."
+    $previousProgress = $ProgressPreference
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        for ($attempt = 1; $attempt -le 2; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $uri.AbsoluteUri -OutFile $partial -UseBasicParsing -TimeoutSec 60 -DisableKeepAlive
+                break
+            } catch {
+                if ($attempt -eq 2) { throw }
+                Write-Warning 'Download failed or timed out; retrying once. No game files have been changed.'
+            }
+        }
+    } finally { $ProgressPreference = $previousProgress }
+    if ((Get-Sha256 $partial) -ne $lock.sha256 -or (Get-Item -LiteralPath $partial).Length -ne $lock.size) {
+        throw 'Downloaded archive SHA-256 or size mismatch. No game files were changed.'
+    }
+    Move-Item -LiteralPath $partial -Destination $archive -Force
 }
 if ((Get-Sha256 $archive) -ne $lock.sha256 -or (Get-Item -LiteralPath $archive).Length -ne $lock.size) {
     throw 'Archive SHA-256 or size does not match nightcoop.lock.json.'
 }
-Add-Type -AssemblyName System.IO.Compression.FileSystem
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::OpenRead($archive)
 try {
     $seen = @{}
@@ -71,15 +104,19 @@ try {
     if (-not $PSCmdlet.ShouldProcess($gameRoot, "Back up saves and install NightCoop $($lock.version) ($($files.Count) files)")) { return }
 
     $config = Read-SetupConfig
-    if (-not $config.savePath -or -not (Test-Path -LiteralPath $config.savePath -PathType Container)) {
-        throw 'Configured savePath must exist. Set config.local.json before installing.'
+    if (-not $config.savePath -or -not [IO.Path]::IsPathRooted($config.savePath)) { throw 'Configure an absolute savePath using Setup-NightCoop.cmd.' }
+    $saveRoot = [IO.Path]::GetFullPath($config.savePath).TrimEnd('\')
+    $repoPath = [IO.Path]::GetFullPath($script:RepoRoot).TrimEnd('\')
+    if ($saveRoot -eq $repoPath -or $saveRoot.StartsWith($repoPath + '\', [StringComparison]::OrdinalIgnoreCase) -or $repoPath.StartsWith($saveRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The save folder and this kit must not contain one another.'
     }
-    $saveRoot = (Resolve-Path -LiteralPath $config.savePath).ProviderPath.TrimEnd('\')
+    $savesExist = Test-Path -LiteralPath $saveRoot -PathType Container
+    if ((Test-Path -LiteralPath $saveRoot) -and -not $savesExist) { throw 'savePath must be a folder, not a file.' }
     $backupRelative = 'backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
     $backup = Get-ChildPath $script:RepoRoot $backupRelative
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
-    Write-Host "Backing up saves to $backup\saves ..."
-    $saveFiles = @(Get-ChildItem -LiteralPath $saveRoot -Recurse -File -Force)
+    Write-Host "Backing up any existing saves to $backup\saves ..."
+    $saveFiles = @(if ($savesExist) { Get-ChildItem -LiteralPath $saveRoot -Recurse -File -Force })
     $saveManifest = @(foreach ($file in $saveFiles) {
         $relative = $file.FullName.Substring($saveRoot.Length + 1)
         $source = Get-ChildPath $saveRoot $relative
@@ -118,6 +155,7 @@ try {
         archiveSha256 = $lock.sha256
         backupRelative = $backupRelative
         savesBackedUp = $saveManifest.Count
+        savesExistedBefore = $savesExist
         files = $files
         disabledFiles = $disabledFiles
     }

@@ -1,72 +1,72 @@
-# 導入記録
+# 導入・検証・復元
 
-2026-11-07（日本時間）確認。
+## 導入の動き
 
-## 導入前
+`Setup-NightCoop.cmd` はSteamのライブラリ、GOGの登録情報、Epicのインストール情報からゲーム本体を探します。
+自動検出できなければフォルダを入力できます。ゲームルート、`bin/x64`、`Cyberpunk2077.exe` のパスを受け付けます。
+複数見つかった場合は選択します。
 
-- このフォルダは空。ローカルGit repo（`main`）を初期化。
-- 本体: `I:\steamlibrary\steamapps\common\Cyberpunk 2077`
-- Steam app: `1091500` / build ID: `26161058`
-- EXE ProductVersion: `2.5` / FileVersion: `3.0.5813403`
-- Phantom Libertyあり。
-- 既存 `bin\x64\version.dll` と `plugins\cyber_engine_tweaks.asi` あり。
-- `red4ext` とNightCoopは未導入。
-- セーブ: 311ファイル、590,084,500 bytes。ユーザーのセーブやSteam IDはコミットしない。
+セーブは現在のWindowsユーザーのSaved Gamesフォルダから検出します。移動したSaved Gamesにも対応し、`-SavePath` で明示指定もできます。
+個別のパスは `config.local.json` に保存し、配布・Git管理には含めません。
 
-## 配布物
+導入スクリプトは次の順序で処理します。
 
-[NightCoop公式配布一覧](https://nightcoop.net/releases.json)で最新版を確認し、ゲーム2.5用を選択。
-固定情報は `nightcoop.lock.json` に記録。
+1. ゲーム終了状態と、EXEのProductVersionが固定版と一致することを確認。
+2. 未取得なら公式配布一覧の版・撤回情報・URL・SHA-256・サイズを照合して公式ZIPを取得。
+3. ZIPのSHA-256・サイズ・収録パスを検証。キャッシュを使う場合もハッシュを再確認。
+4. セーブと上書き対象を `backups/<日時-ID>/` にコピーし、個別ハッシュで照合。セーブ未作成なら0件として記録。
+5. MODの10ファイルを配置・照合し、`local/installation.json` に導入記録を保存。
 
-```text
-NightCoop-0.2.0-beta-2.5.zip
-10,117,378 bytes
-SHA-256: ca070aa296519fb4147dadf14a625a538df59d6a20d289fa3e335ae3da3cace5
+既存のNightCoopフォルダやこのキットの導入記録がある場合、インストーラーは重ねて上書きしません。
+`Setup-NightCoop.cmd` はこのキットで導入済みなら検証だけを行います。他の方法で導入している場合は既存構成を整理してから利用してください。
+
+## PCにだけ残るデータ
+
+| 場所 | 内容 |
+| --- | --- |
+| `config.local.json` | 自分のゲームとセーブのパス |
+| `.cache/` | 公式ZIP。公式と同じSHA-256であることを毎回検証 |
+| `local/installation.json` | 導入先、ファイルハッシュ、復元元 |
+| `backups/<日時-ID>/saves/` | 導入前のセーブがある場合、そのコピー |
+| `backups/<日時-ID>/saves-manifest.json` | セーブの照合情報 |
+| `backups/<日時-ID>/originals/` | 上書き前のMOD・ローダーファイル |
+| `backups/<日時-ID>/disabled/` | 明示オプションで退避した旧CETがある場合、そのコピー |
+
+復元に必要なので、このキットのフォルダは導入後も保持してください。
+`Check-NightCoop.cmd` はMODファイルに加え、導入時からゲームEXEが変わっていないことも確認します。
+ゲーム更新後は、同じ表示バージョンでもEXEが変わっていれば起動スクリプトが停止します。
+
+## 復元
+
+ゲームを終了して `Restore-NightCoop.cmd` を実行します。プレビューは次のコマンドです。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Restore-NightCoop.ps1 -WhatIf
 ```
 
-公式値とダウンロード実体のサイズ・SHA-256が一致。
-配布ページに残っているデモ説明文ではなく、実際の配布JSONを使用し、demoフラグや撤回情報も確認。
+導入記録にあるファイルだけを削除または元に戻します。後から別のMODで変更されたファイルがあれば、処理前の確認で停止します。
+NightCoopが後から生成した設定・ログは削除せず、空でないフォルダも残します。再導入時は残ったNightCoop設定を別の場所に保存してから整理してください。
+セーブとバックアップ自体は残します。セーブを過去の状態に戻す機能はありません。
 
-ZIP内の10ファイル:
+## 既存MODと旧CET
 
-```text
-bin/x64/winmm.dll
-red4ext/RED4ext.dll
-red4ext/LICENSE.txt
-red4ext/THIRD_PARTY_LICENSES.txt
-red4ext/plugins/NightCoop/NightCoop.dll
-red4ext/plugins/NightCoop/redscript/NightCoopSdk.reds
-red4ext/plugins/NightCoop/redscript/NightCoopSdkNative.reds
-r6/scripts/NightCoopFlight/NightCoopFlight.reds
-r6/scripts/NightCoopFlight/LICENSE.txt
-r6/scripts/NightCoopFlight/THIRD_PARTY.md
+通常のセットアップは既存CETを無効化しません。NightCoopに必要なRED4extは公式ZIPに含まれます。
+このキットだけで問題を切り分ける場合、他のMODとの互換性は別に確認してください。
+
+古いCETを退避すると判断した場合のみ、設定後に次を実行できます。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-NightCoop.ps1 -DisableLegacyCet -WhatIf
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-NightCoop.ps1 -DisableLegacyCet
 ```
 
-## 検証結果
+このオプションは `bin/x64/version.dll` と `bin/x64/plugins/cyber_engine_tweaks.asi` をバックアップ後に無効化します。
+復元すると旧CETも元に戻るため、ゲームの再起動前に確認してください。
 
-- PowerShellスクリプトの構文解析が通過。
-- 導入前の `Install-NightCoop.ps1 -DisableLegacyCet -WhatIf` が通過。
-- セーブ311ファイルを個別SHA-256で照合してバックアップ。
-- 旧CETの `bin\x64\version.dll`（2020-12-19）と `plugins\cyber_engine_tweaks.asi`（2021-01-06）をバックアップ後に無効化。旧ログはゲーム1.06時代。
-- NightCoop / RED4ext / 同梱スクリプト10ファイルを配置し、全ファイルのSHA-256がZIP内の値と一致。
-- `Test-Setup.ps1` 通過。`Restore-NightCoop.ps1 -WhatIf` 通過（実際の復元は未実施）。
-- Steam URIによる起動ではゲームプロセスが立ち上がらず、直接EXE起動で起動を確認。起動スクリプトは直接EXE起動を採用。
-- 2026-11-07 21:19 JST: ゲームプロセスとゲームウィンドウ名を確認。
-- RED4extログ: `RED4ext (v1.31.0)` / `NightCoop (version: 0.2.0, author(s): NightCoop) has been loaded` / `1 plugin(s) loaded`。
-- NightCoopログ: `protocol version 164, build a3ea83df` / `game version 2.5` / `NightCoop SDK v1 ready` を確認。
-- 画面操作ツールは `windows sandbox failed: helper_unknown_error: setup refresh had errors` で起動に失敗。Co-opメニューの目視確認・セッション作成・他プレイヤーとの接続は未確認。
+## ログと確認状況
 
-バックアップ先（Git対象外）:
+Co-opが出ない場合はゲーム本体の `red4ext/logs/red4ext-*.log` を確認します。
+NightCoopのログは `red4ext/logs` と `red4ext/plugins/NightCoop/logs` です。[公式ガイド](https://nightcoop.net/docs.html)
 
-```text
-backups/20261107-211831-6e42f82d/
-```
-
-NightCoopログに、2.5のセーブ形式に関する未検証の警告あり。実際の協力プレイはバックアップを保持し、まず新規または試験用のセーブで確認する。
-
-## 参照元
-
-- [公式サイト](https://nightcoop.net/)
-- [公式ダウンロード](https://nightcoop.net/download.html)
-- [公式配布一覧JSON](https://nightcoop.net/releases.json)
-- [公式導入・操作ガイド](https://nightcoop.net/docs.html)
+2026-11-07の実機確認では、ゲーム2.5でRED4ext 1.31.0とNightCoop 0.2.0が読み込まれ、protocol 164・build a3ea83dfをログで確認しました。
+Co-opメニューの目視確認と他PCとの接続は未確認です。

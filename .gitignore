@@ -2,6 +2,7 @@
 /backups/
 /local/
 /config.local.json
+/dist/
 *.log
 *.dmp
 *.zip

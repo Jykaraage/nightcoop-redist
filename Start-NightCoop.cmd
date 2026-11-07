@@ -1,3 +1,6 @@
 @echo off
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Start-NightCoop.ps1"
-if errorlevel 1 pause
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
