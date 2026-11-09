@@ -2,16 +2,37 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:RepoRoot = Split-Path -Parent $PSScriptRoot
 
+# Keep reading earlier kits without moving their receipts or backups. A status
+# check must never change files. New installations always use scripts/.
+function Get-SetupConfigPath {
+    $path = Join-Path $script:RepoRoot 'scripts\config.local.json'
+    $legacy = Join-Path $script:RepoRoot 'config.local.json'
+    if (-not (Test-Path -LiteralPath $path) -and (Test-Path -LiteralPath $legacy)) { return $legacy }
+    $path
+}
+
+function Get-InstallationReceiptPath {
+    $path = Join-Path $script:RepoRoot 'scripts\local\installation.json'
+    $legacy = Join-Path $script:RepoRoot 'local\installation.json'
+    if (Test-Path -LiteralPath $legacy) {
+        if (Test-Path -LiteralPath $path) {
+            throw 'Both current and legacy installation receipts exist. Preserve both and review them before changing files.'
+        }
+        return $legacy
+    }
+    $path
+}
+
 function Read-SetupConfig {
-    $path = Join-Path $script:RepoRoot 'config.local.json'
-    if (-not (Test-Path -LiteralPath $path)) {
-        throw 'Run Setup-NightCoop.cmd first to configure this PC.'
+    $path = Get-SetupConfigPath
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw 'Run NightCoop.cmd first to configure this PC.'
     }
     Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 
 function Read-ModLock {
-    Get-Content -LiteralPath (Join-Path $script:RepoRoot 'nightcoop.lock.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    Get-Content -LiteralPath (Join-Path $script:RepoRoot 'scripts\nightcoop.lock.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 
 function Resolve-GameRoot {

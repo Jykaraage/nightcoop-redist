@@ -5,8 +5,8 @@ $gameRoot = Resolve-GameRoot $GamePath
 $lock = Read-ModLock
 $version = (Get-Item -LiteralPath (Join-Path $gameRoot 'bin\x64\Cyberpunk2077.exe')).VersionInfo.ProductVersion
 if ($version -ne $lock.gameVersion) { throw "Game changed: expected $($lock.gameVersion), found $version." }
-$receiptPath = Join-Path $script:RepoRoot 'local\installation.json'
-if (-not (Test-Path -LiteralPath $receiptPath)) { throw 'No installation receipt. Run Install-NightCoop.ps1 first.' }
+$receiptPath = Get-InstallationReceiptPath
+if (-not (Test-Path -LiteralPath $receiptPath)) { throw 'No installation receipt. Run NightCoop.cmd to set up this PC.' }
 $receipt = Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($receipt.status -ne 'installed') { throw "Installation status: $($receipt.status)" }
 if ($gameRoot -ne $receipt.gamePath) { throw 'The selected game folder differs from the installation receipt.' }

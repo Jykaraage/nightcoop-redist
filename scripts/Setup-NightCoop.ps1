@@ -6,9 +6,9 @@ param(
     [switch]$NonInteractive
 )
 . "$PSScriptRoot\Common.ps1"
-$configPath = Join-Path $script:RepoRoot 'config.local.json'
+$configPath = Join-Path $script:RepoRoot 'scripts\config.local.json'
 $existing = $null
-if (Test-Path -LiteralPath $configPath) { $existing = Read-SetupConfig }
+if (Test-Path -LiteralPath (Get-SetupConfigPath)) { $existing = Read-SetupConfig }
 if (-not $GamePath -and $existing) { $GamePath = $existing.gamePath }
 if (-not $GamePath) {
     $found = @(Find-GameInstallations)
@@ -33,7 +33,7 @@ if (-not $SavePath -and $existing) { $SavePath = $existing.savePath }
 if (-not $SavePath) { $SavePath = Get-DefaultSavePath }
 if (-not [IO.Path]::IsPathRooted($SavePath)) { throw '-SavePath must be an absolute path.' }
 $SavePath = [IO.Path]::GetFullPath($SavePath.Trim().Trim('"')).TrimEnd('\')
-$receiptPath = Join-Path $script:RepoRoot 'local\installation.json'
+$receiptPath = Get-InstallationReceiptPath
 if (Test-Path -LiteralPath $receiptPath) {
     $receipt = Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($receipt.gamePath -ne $gameRoot) { throw 'An existing receipt belongs to another game folder. Restore that installation first.' }
@@ -45,9 +45,9 @@ Write-Host "Group build: NightCoop $($lock.version) / protocol $($lock.protocol)
 if ($ConfigureOnly) { Write-Host 'Configuration saved. No game files changed.'; return }
 if (Test-Path -LiteralPath $receiptPath) {
     & "$PSScriptRoot\Test-Setup.ps1" | Format-List | Out-Host
-    Write-Host 'Already installed and verified. Use Start-NightCoop.cmd to play.'
+    Write-Host 'Already installed and verified. Use NightCoop.cmd to play.'
     return
 }
 & "$PSScriptRoot\Install-NightCoop.ps1"
 & "$PSScriptRoot\Test-Setup.ps1" | Format-List | Out-Host
-Write-Host 'Setup complete. Use Start-NightCoop.cmd to play.'
+Write-Host 'Setup complete. Use NightCoop.cmd to play.'

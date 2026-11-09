@@ -16,7 +16,7 @@ $exe = Get-Item -LiteralPath (Join-Path $gameRoot 'bin\x64\Cyberpunk2077.exe')
 if ($exe.VersionInfo.ProductVersion -ne $lock.gameVersion) {
     throw "Expected game $($lock.gameVersion), found $($exe.VersionInfo.ProductVersion). Review the lock before installing."
 }
-$receiptPath = Join-Path $script:RepoRoot 'local\installation.json'
+$receiptPath = Get-InstallationReceiptPath
 if (Test-Path -LiteralPath $receiptPath) {
     throw 'An installation receipt already exists. Restore it before reinstalling or updating.'
 }
@@ -25,7 +25,7 @@ foreach ($relative in @('red4ext\plugins\NightCoop', 'r6\scripts\NightCoopFlight
         throw "Existing NightCoop installation found: $relative. Preserve/remove it before using this installer."
     }
 }
-$archive = Get-ChildPath $script:RepoRoot ('.cache\' + $lock.fileName)
+$archive = Get-ChildPath $script:RepoRoot ('scripts\.cache\' + $lock.fileName)
 if (-not (Test-Path -LiteralPath $archive)) {
     if ($WhatIfPreference) { Write-Output "Would download and verify $($lock.url), then back up and install into $gameRoot"; return }
     $uri = [Uri]$lock.url
@@ -104,7 +104,7 @@ try {
     if (-not $PSCmdlet.ShouldProcess($gameRoot, "Back up saves and install NightCoop $($lock.version) ($($files.Count) files)")) { return }
 
     $config = Read-SetupConfig
-    if (-not $config.savePath -or -not [IO.Path]::IsPathRooted($config.savePath)) { throw 'Configure an absolute savePath using Setup-NightCoop.cmd.' }
+    if (-not $config.savePath -or -not [IO.Path]::IsPathRooted($config.savePath)) { throw 'Configure an absolute savePath using NightCoop.cmd.' }
     $saveRoot = [IO.Path]::GetFullPath($config.savePath).TrimEnd('\')
     $repoPath = [IO.Path]::GetFullPath($script:RepoRoot).TrimEnd('\')
     if ($saveRoot -eq $repoPath -or $saveRoot.StartsWith($repoPath + '\', [StringComparison]::OrdinalIgnoreCase) -or $repoPath.StartsWith($saveRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
@@ -112,7 +112,7 @@ try {
     }
     $savesExist = Test-Path -LiteralPath $saveRoot -PathType Container
     if ((Test-Path -LiteralPath $saveRoot) -and -not $savesExist) { throw 'savePath must be a folder, not a file.' }
-    $backupRelative = 'backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+    $backupRelative = 'scripts\backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
     $backup = Get-ChildPath $script:RepoRoot $backupRelative
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
     Write-Host "Backing up any existing saves to $backup\saves ..."
@@ -181,7 +181,7 @@ try {
         Save-Json $receipt (Join-Path $backup 'installation.json')
         Write-Host "Installed NightCoop $($lock.version); protocol $($lock.protocol). Backup: $backup"
     } catch {
-        Write-Warning 'Installation incomplete. The receipt and backups were kept; run Restore-NightCoop.ps1 to undo copied files.'
+        Write-Warning 'Installation incomplete. The receipt and backups were kept; run NightCoop.cmd and choose Restore to undo copied files.'
         throw
     }
 } finally { $zip.Dispose() }

@@ -2,7 +2,7 @@
 param()
 . "$PSScriptRoot\Common.ps1"
 Assert-GameStopped
-$receiptPath = Join-Path $script:RepoRoot 'local\installation.json'
+$receiptPath = Get-InstallationReceiptPath
 if (-not (Test-Path -LiteralPath $receiptPath)) { throw 'No installation receipt to restore.' }
 $receipt = Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $gameRoot = Resolve-GameRoot $receipt.gamePath
