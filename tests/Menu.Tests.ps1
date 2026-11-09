@@ -10,6 +10,10 @@ function Get-FixtureSnapshot {
     # Include directory creation and timestamps as well as file contents so a
     # status check cannot quietly rewrite configuration or receipt files.
     (@(Get-ChildItem -LiteralPath $Fixture.Root -Recurse -Force | Sort-Object FullName | ForEach-Object {
+        # Windows enumeration can return cached directory timestamps following
+        # fixture creation. Query current metadata rather than compare that
+        # cached listing against the refreshed values from a later traversal.
+        $_.Refresh()
         $hash = if ($_.PSIsContainer) { '<directory>' } else { Get-Sha256 $_.FullName }
         '{0}|{1}|{2}' -f $_.FullName, $_.LastWriteTimeUtc.Ticks, $hash
     }) -join "`n")
