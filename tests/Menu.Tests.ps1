@@ -40,14 +40,30 @@ function Invoke-FixtureMenu {
     & "$($Fixture.Kit)\scripts\NightCoop.ps1" -GamePath $Fixture.Game -SavePath $Fixture.Saves | Out-Null
     Assert-True ($NightCoopTestMenuAnswers.Count -eq 0) 'Menu did not consume expected answers'
 }
+function Assert-FixtureSnapshotEqual {
+    param([string]$Before, [string]$After, [string]$Context)
+    if ($Before -cne $After) {
+        # Preserve the full invariant and report precisely which names, write
+        # timestamps, or hashes differ. <= is before; => is after.
+        Write-Host "Snapshot mismatch: $Context"
+        Write-Host 'Record format: full path | LastWriteTimeUtc ticks | SHA-256 or <directory>'
+        Compare-Object -ReferenceObject @($Before -split "`n") -DifferenceObject @($After -split "`n") -CaseSensitive |
+            ForEach-Object { Write-Host ("{0} {1}" -f $_.SideIndicator, $_.InputObject) }
+        throw "ASSERTION FAILED: $Context"
+    }
+}
 function Assert-ReadOnlyMenu {
     param($Fixture, [string]$State, [bool]$HasReceipt, [string[]]$Answers = @('0'))
     $before = Get-FixtureSnapshot $Fixture
+    # A second immediate read distinguishes unstable fixture metadata or the
+    # snapshot reader itself from changes made by status/menu execution.
+    Assert-FixtureSnapshotEqual $before (Get-FixtureSnapshot $Fixture) "Repeated pre-status snapshot changed $State fixture"
     $status = Get-FixtureStatus $Fixture
     Assert-True ($status.State -eq $State) "Expected status $State, got $($status.State)"
     Assert-True ($status.HasReceipt -eq $HasReceipt) 'Incorrect receipt-presence status'
+    Assert-FixtureSnapshotEqual $before (Get-FixtureSnapshot $Fixture) "Status inspection changed $State fixture"
     Invoke-FixtureMenu $Fixture $Answers
-    Assert-True ((Get-FixtureSnapshot $Fixture) -ceq $before) "Status/cancel changed $State fixture"
+    Assert-FixtureSnapshotEqual $before (Get-FixtureSnapshot $Fixture) "Menu cancel changed $State fixture"
 }
 
 $f = New-Fixture 'menu-new'
