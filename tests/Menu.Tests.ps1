@@ -14,27 +14,31 @@ function Get-FixtureSnapshot {
         '{0}|{1}|{2}' -f $_.FullName, $_.LastWriteTimeUtc.Ticks, $hash
     }) -join "`n")
 }
-$script:MenuAnswers = [Collections.Generic.Queue[string]]::new()
-$script:Launches = [Collections.Generic.List[string]]::new()
+# Mocks are called from nested script scopes. Unqualified, uniquely named
+# shared objects resolve through those scopes to this test harness; script:
+# would incorrectly select NightCoop.ps1 or Start-NightCoop.ps1's scope.
+$NightCoopTestRoot = $script:TestRoot
+$NightCoopTestMenuAnswers = [Collections.Generic.Queue[string]]::new()
+$NightCoopTestLaunches = [Collections.Generic.List[string]]::new()
 function Read-Host {
     param([string]$Prompt)
-    if ($script:MenuAnswers.Count -eq 0) { throw "Unexpected interactive prompt: $Prompt" }
-    $script:MenuAnswers.Dequeue()
+    if ($NightCoopTestMenuAnswers.Count -eq 0) { throw "Unexpected interactive prompt: $Prompt" }
+    $NightCoopTestMenuAnswers.Dequeue()
 }
 function Start-Process {
     [CmdletBinding()]
     param([string]$FilePath, [string]$WorkingDirectory, [string]$WindowStyle)
     # Never launch even the fixture executable, and record all launch attempts.
-    Assert-True ($FilePath.StartsWith($script:TestRoot + '\', [StringComparison]::OrdinalIgnoreCase)) 'Launch escaped fixture'
+    Assert-True ($FilePath.StartsWith($NightCoopTestRoot + '\', [StringComparison]::OrdinalIgnoreCase)) 'Launch escaped fixture'
     Assert-True ($WorkingDirectory -eq (Split-Path -Parent $FilePath)) 'Unexpected launch working directory'
-    $script:Launches.Add($FilePath)
+    $NightCoopTestLaunches.Add($FilePath)
 }
 function Invoke-FixtureMenu {
     param($Fixture, [string[]]$Answers)
-    $script:MenuAnswers.Clear()
-    foreach ($answer in $Answers) { $script:MenuAnswers.Enqueue($answer) }
+    $NightCoopTestMenuAnswers.Clear()
+    foreach ($answer in $Answers) { $NightCoopTestMenuAnswers.Enqueue($answer) }
     & "$($Fixture.Kit)\scripts\NightCoop.ps1" -GamePath $Fixture.Game -SavePath $Fixture.Saves | Out-Null
-    Assert-True ($script:MenuAnswers.Count -eq 0) 'Menu did not consume expected answers'
+    Assert-True ($NightCoopTestMenuAnswers.Count -eq 0) 'Menu did not consume expected answers'
 }
 function Assert-ReadOnlyMenu {
     param($Fixture, [string]$State, [bool]$HasReceipt, [string[]]$Answers = @('0'))
@@ -57,10 +61,10 @@ Assert-True ($receipt.backupRelative.Replace('\', '/').StartsWith('scripts/backu
 Assert-ReadOnlyMenu $f 'Ready' $true @('invalid', '0')
 $status = Get-FixtureStatus $f
 Assert-True ($null -ne $status.Details) 'Ready status omitted verification details'
-$launchCount = $script:Launches.Count
+$launchCount = $NightCoopTestLaunches.Count
 Invoke-FixtureMenu $f @('1')
-Assert-True ($script:Launches.Count -eq ($launchCount + 1)) 'Menu did not launch exactly once'
-Assert-True ($script:Launches[$launchCount] -eq "$($f.Game)\bin\x64\Cyberpunk2077.exe") 'Menu launched wrong executable'
+Assert-True ($NightCoopTestLaunches.Count -eq ($launchCount + 1)) 'Menu did not launch exactly once'
+Assert-True ($NightCoopTestLaunches[$launchCount] -eq "$($f.Game)\bin\x64\Cyberpunk2077.exe") 'Menu launched wrong executable'
 Invoke-FixtureMenu $f @('2')
 Assert-True (-not (Test-Path -LiteralPath "$($f.Kit)\scripts\local\installation.json")) 'Menu restore left active receipt'
 Assert-True (-not (Test-Path -LiteralPath "$($f.Game)\bin\x64\winmm.dll")) 'Menu restore left loader'
@@ -71,15 +75,15 @@ Write-Host 'PASS: new/configured setup, invalid choices, safe cancellation, veri
 
 $modPath = "$($f.Game)\red4ext\plugins\NightCoop\NightCoop.dll"
 [IO.File]::WriteAllText($modPath, 'modified after installation')
-$launchCount = $script:Launches.Count
+$launchCount = $NightCoopTestLaunches.Count
 Assert-ReadOnlyMenu $f 'NeedsAttention' $true @('1', '0')
-Assert-True ($script:Launches.Count -eq $launchCount) 'Menu launched a broken installation'
+Assert-True ($NightCoopTestLaunches.Count -eq $launchCount) 'Menu launched a broken installation'
 $before = Get-FixtureSnapshot $f
 Assert-Throws { Invoke-FixtureMenu $f @('2') } 'changed after installation'
 Assert-True ((Get-FixtureSnapshot $f) -ceq $before) 'Failed menu restore changed fixture'
 Remove-Item -LiteralPath "$($f.Kit)\scripts\config.local.json"
 Assert-ReadOnlyMenu $f 'NeedsAttention' $true @('1', '')
-Assert-True ($script:Launches.Count -eq $launchCount) 'Menu launched without configuration'
+Assert-True ($NightCoopTestLaunches.Count -eq $launchCount) 'Menu launched without configuration'
 Write-Host 'PASS: damaged installation and missing configuration cannot launch or silently set up'
 
 foreach ($receiptText in @('{broken json', '{}')) {
@@ -117,6 +121,52 @@ Write-Host 'PASS: legacy config/receipt/backup restore and conflicting receipt d
 $launcher = Get-Content -LiteralPath "$script:SourceRoot\NightCoop.cmd" -Raw
 Assert-True ($launcher -match '(?i)scripts\\NightCoop\.ps1') 'CMD does not invoke the unified PowerShell entry point'
 Assert-True ($launcher.Contains('%*')) 'CMD does not forward user arguments'
+
+# Exercise cmd.exe argument parsing and exit-code propagation, not the game.
+# Only this disposable kit receives the harmless PowerShell argument probe.
+$cmdKit = Join-Path $NightCoopTestRoot 'cmd wrapper with spaces'
+New-Item -ItemType Directory -Path "$cmdKit\scripts" -Force | Out-Null
+Copy-Item -LiteralPath "$script:SourceRoot\NightCoop.cmd" -Destination "$cmdKit\NightCoop.cmd"
+@'
+param([string]$GamePath, [string]$SavePath, [int]$ProbeExitCode)
+Write-Output "PROBE_GAME=$GamePath"
+Write-Output "PROBE_SAVES=$SavePath"
+exit $ProbeExitCode
+'@ | Set-Content -LiteralPath "$cmdKit\scripts\NightCoop.ps1" -Encoding ASCII
+$probeGame = Join-Path $cmdKit 'game folder with spaces'
+$probeSaves = Join-Path $cmdKit 'save folder with spaces'
+foreach ($probeExitCode in @(0, 23)) {
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $env:ComSpec
+    $startInfo.Arguments = '/d /s /c ""{0}\NightCoop.cmd" -GamePath "{1}" -SavePath "{2}" -ProbeExitCode {3}"' -f $cmdKit, $probeGame, $probeSaves, $probeExitCode
+    $startInfo.WorkingDirectory = $cmdKit
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        Assert-True ($process.Start()) 'Could not start isolated CMD wrapper probe'
+        # Drain both output streams asynchronously to prevent pipe deadlocks.
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $process.StandardInput.WriteLine('')
+        $process.StandardInput.Close()
+        if (-not $process.WaitForExit(30000)) {
+            $process.Kill()
+            throw 'Isolated CMD wrapper probe exceeded 30 seconds'
+        }
+        Assert-True ($stdoutTask.Wait(5000) -and $stderrTask.Wait(5000)) 'CMD probe output streams did not close'
+        $stdout = $stdoutTask.Result
+        $stderr = $stderrTask.Result
+        Assert-True ($process.ExitCode -eq $probeExitCode) "CMD lost exit code $probeExitCode (got $($process.ExitCode)): $stderr"
+        Assert-True ($stdout.Contains("PROBE_GAME=$probeGame")) "CMD changed spaced GamePath: $stdout $stderr"
+        Assert-True ($stdout.Contains("PROBE_SAVES=$probeSaves")) "CMD changed spaced SavePath: $stdout $stderr"
+    } finally { $process.Dispose() }
+}
+Write-Host 'PASS: real CMD wrapper forwards spaced arguments and preserves exit codes 0 and 23'
 
 # Exercise the actual packaging allowlist while private fixture data exists.
 & "$script:SourceRoot\scripts\Build-Package.ps1" | Out-Null
