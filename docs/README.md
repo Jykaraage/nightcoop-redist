@@ -13,13 +13,13 @@
 ## メンバーの導入手順
 
 1. [このrepo](https://github.com/Jykaraage/nightcoop-redist)の **Code → Download ZIP** をダウンロードし、ZIPを**すべて展開**します。ゲーム本体とは別の、書き込み可能なフォルダに置いてください。
-2. ゲームを終了し、展開先の **`Setup-NightCoop.cmd`** をダブルクリックします。ゲームの場所が見つからなければ、画面の案内に沿ってパスを入力します。
-3. `Setup complete` または `Already installed and verified` と表示されたら完了。**`Start-NightCoop.cmd`** から起動します。ストアのクライアントは起動しておいてください。
+2. ゲームを終了し、展開先の **`NightCoop.cmd`** をダブルクリックします。現在の状態を確認し、未導入なら `1` を入力して初回セットアップを選びます（`0` は何もせず終了）。ゲームの場所が見つからなければ、画面の案内に沿ってパスを入力します。
+3. `Setup complete` と表示されたら完了。再び **`NightCoop.cmd`** を開き、導入済みメニューで `1` を選ぶと起動します。ストアのクライアントは起動しておいてください。
 
 初回は公式サイトへの通信が必要です。ゲーム本体は各自で用意してください。ゲーム版が2.5以外なら停止し、自動で更新・ダウングレードしません。
 セーブがまだないPCでも導入できます。ダウンロード後にゲームを勝手に起動することはありません。
 
-このrepoは非公開です。GitHubで取得するにはrepoへのアクセス権が必要です。メンバーに直接ZIPを渡す場合は、後述の配布パッケージを使えます。
+メンバーに直接ZIPを渡す場合は、後述の配布パッケージを使えます。
 
 ## 一緒に遊ぶ
 
@@ -31,25 +31,32 @@
 
 操作の詳細は[公式ガイド](https://nightcoop.net/docs.html)を参照してください。Beta版のため、最初の接続確認には新規または試験用のセーブをおすすめします。
 
-## 同梱コマンド
+## 操作は `NightCoop.cmd` に統一
 
-| ファイル | 用途 |
+起動時に状態を表示してから、次の操作を選びます。
+
+| 状態 | メニュー |
 | --- | --- |
-| `Setup-NightCoop.cmd` | 自動検出・PCごとの設定保存・導入。導入済みなら再検証 |
-| `Start-NightCoop.cmd` | バージョンとファイルの検証後にゲーム起動 |
-| `Check-NightCoop.cmd` | 導入済みファイルとゲーム更新の確認 |
-| `Restore-NightCoop.cmd` | 導入前のMOD構成に復元。セーブは上書きしない |
+| 未導入 | `1`: 初回セットアップ / `0`: 何もせず終了 |
+| 導入済み | `1`: ゲーム起動 / `2`: 導入前のMOD構成に復元 / `0`: 何もせず終了 |
 
-ゲームやセーブの場所を指定する場合は、PowerShellからも実行できます。
+導入済みファイルとゲームの検証に失敗した場合は起動しません。復元は選択できますが、導入記録とバックアップのハッシュなどを確認し、安全に戻せない場合は停止します。復元でセーブを上書きすることはありません。
+
+ルートに置くファイルは `NightCoop.cmd` だけです。説明書とライセンスは `docs/`、設定・固定バージョン情報・内部スクリプト・作業データは `scripts/` にあります。以下のコマンド例はすべてキットのルートから実行します。
+
+ゲームやセーブの場所の指定、設定のみの保存、検証・復元のプレビューなど、詳細な操作には `scripts/` 内のPowerShellスクリプトを使えます。
 
 ```powershell
-.\Setup-NightCoop.cmd -GamePath "D:\Games\Cyberpunk 2077"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Setup-NightCoop.ps1 -GamePath "D:\Games\Cyberpunk 2077"
 
 # セーブ場所を変更している場合のみ指定
-.\Setup-NightCoop.cmd -GamePath "D:\Games\Cyberpunk 2077" -SavePath "D:\My Saves\Cyberpunk 2077"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Setup-NightCoop.ps1 -GamePath "D:\Games\Cyberpunk 2077" -SavePath "D:\My Saves\Cyberpunk 2077"
 
 # 設定だけ保存し、ゲーム本体は変更しない
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Setup-NightCoop.ps1 -ConfigureOnly
+
+# 状態確認だけを実行
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-Setup.ps1
 ```
 
 CMDはプロセス単位の `ExecutionPolicy Bypass` を使います。Windows全体の設定は変更しません。
@@ -63,10 +70,10 @@ CMDはプロセス単位の `ExecutionPolicy Bypass` を使います。Windows�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Package.ps1
 ```
 
-`dist/NightCoop-Setup-0.2.0-beta.zip` とSHA-256ファイルが生成されます。
+`scripts/dist/NightCoop-Setup-0.2.0-beta.zip` とSHA-256ファイルが生成されます。
 配布ZIPは明示した管理ファイルだけを収録し、PCごとの設定・バックアップ・ログ・MODバイナリ・Git履歴を含めません。
 MOD本体は受け取った人のPCで[公式サイト](https://nightcoop.net/download.html)から取得します。
 
-詳細: [導入と復元](docs/installation.md) / [配布・更新方針](docs/distribution.md) / [第三者のソフトウェア](THIRD-PARTY-NOTICES.md)
+詳細: [導入と復元](installation.md) / [配布・更新方針](distribution.md) / [第三者のソフトウェア](THIRD-PARTY-NOTICES.md)
 
 このキットのスクリプトと説明書は[MIT License](LICENSE)です。NightCoopおよびCyberpunk 2077のライセンスを付与するものではありません。

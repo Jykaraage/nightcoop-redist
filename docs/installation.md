@@ -2,43 +2,56 @@
 
 ## 導入の動き
 
-`Setup-NightCoop.cmd` はSteamのライブラリ、GOGの登録情報、Epicのインストール情報からゲーム本体を探します。
+`NightCoop.cmd` は最初に状態を表示します。未導入の場合は `1` で初回セットアップ、`0` で何もせず終了できます。セットアップ完了後も自動起動はしません。
+
+セットアップはSteamのライブラリ、GOGの登録情報、Epicのインストール情報からゲーム本体を探します。
 自動検出できなければフォルダを入力できます。ゲームルート、`bin/x64`、`Cyberpunk2077.exe` のパスを受け付けます。
 複数見つかった場合は選択します。
 
 セーブは現在のWindowsユーザーのSaved Gamesフォルダから検出します。移動したSaved Gamesにも対応し、`-SavePath` で明示指定もできます。
-個別のパスは `config.local.json` に保存し、配布・Git管理には含めません。
+個別のパスは `scripts/config.local.json` に保存し、配布・Git管理には含めません。
 
 導入スクリプトは次の順序で処理します。
 
 1. ゲーム終了状態と、EXEのProductVersionが固定版と一致することを確認。
 2. 未取得なら公式配布一覧の版・撤回情報・URL・SHA-256・サイズを照合して公式ZIPを取得。
 3. ZIPのSHA-256・サイズ・収録パスを検証。キャッシュを使う場合もハッシュを再確認。
-4. セーブと上書き対象を `backups/<日時-ID>/` にコピーし、個別ハッシュで照合。セーブ未作成なら0件として記録。
-5. MODの10ファイルを配置・照合し、`local/installation.json` に導入記録を保存。
+4. セーブと上書き対象を `scripts/backups/<日時-ID>/` にコピーし、個別ハッシュで照合。セーブ未作成なら0件として記録。
+5. MODの10ファイルを配置・照合し、`scripts/local/installation.json` に導入記録を保存。
 
 既存のNightCoopフォルダやこのキットの導入記録がある場合、インストーラーは重ねて上書きしません。
-`Setup-NightCoop.cmd` はこのキットで導入済みなら検証だけを行います。他の方法で導入している場合は既存構成を整理してから利用してください。
+`NightCoop.cmd` はこのキットで導入済みなら検証結果と、`1`: 起動 / `2`: 復元 / `0`: 何もせず終了のメニューを表示します。他の方法で導入している場合は既存構成を整理してから利用してください。
 
 ## PCにだけ残るデータ
 
 | 場所 | 内容 |
 | --- | --- |
-| `config.local.json` | 自分のゲームとセーブのパス |
-| `.cache/` | 公式ZIP。公式と同じSHA-256であることを毎回検証 |
-| `local/installation.json` | 導入先、ファイルハッシュ、復元元 |
-| `backups/<日時-ID>/saves/` | 導入前のセーブがある場合、そのコピー |
-| `backups/<日時-ID>/saves-manifest.json` | セーブの照合情報 |
-| `backups/<日時-ID>/originals/` | 上書き前のMOD・ローダーファイル |
-| `backups/<日時-ID>/disabled/` | 明示オプションで退避した旧CETがある場合、そのコピー |
+| `scripts/config.local.json` | 自分のゲームとセーブのパス |
+| `scripts/.cache/` | 公式ZIP。公式と同じSHA-256であることを毎回検証 |
+| `scripts/local/installation.json` | 導入先、ファイルハッシュ、復元元 |
+| `scripts/backups/<日時-ID>/saves/` | 導入前のセーブがある場合、そのコピー |
+| `scripts/backups/<日時-ID>/saves-manifest.json` | セーブの照合情報 |
+| `scripts/backups/<日時-ID>/originals/` | 上書き前のMOD・ローダーファイル |
+| `scripts/backups/<日時-ID>/disabled/` | 明示オプションで退避した旧CETがある場合、そのコピー |
 
 復元に必要なので、このキットのフォルダは導入後も保持してください。
-`Check-NightCoop.cmd` はMODファイルに加え、導入時からゲームEXEが変わっていないことも確認します。
+`NightCoop.cmd` の状態確認はMODファイルに加え、導入時からゲームEXEが変わっていないことも確認します。
 ゲーム更新後は、同じ表示バージョンでもEXEが変わっていれば起動スクリプトが停止します。
+
+旧版のルートにある `config.local.json` と `local/installation.json` は、新しい場所に対応するファイルがない場合に読み取れます。旧導入記録が参照するバックアップも復元に使用するため、元の場所に保持してください。自動移行は行いません。新しい設定・導入記録の保存先は `scripts/` 内です。旧・新の導入記録が両方ある場合は、どちらも残して確認が済むまで操作を停止します。
+
+**旧版をGitで管理していた人へ:** ルートの `.gitignore` も `scripts/` へ移動したため、旧配置の個人データには新しい無視設定が適用されません。`git add` を実行する前に、次をキットのルートで一度実行し、このチェックアウトだけの除外設定に旧配置を追加してください。ZIP配布版では不要です。バックアップや設定を追跡対象に追加しないでください。
+
+```powershell
+$excludePath = git rev-parse --git-path info/exclude
+if ($LASTEXITCODE -ne 0) { throw 'Git checkout not found.' }
+@('', '/config.local.json', '/local/', '/backups/', '/.cache/', '/dist/', '*.log', '*.dmp', '*.zip', '*.dll', '*.exe', '*.asi', '*.sav') |
+    Add-Content -LiteralPath $excludePath -Encoding UTF8
+```
 
 ## 復元
 
-ゲームを終了して `Restore-NightCoop.cmd` を実行します。プレビューは次のコマンドです。
+ゲームを終了して `NightCoop.cmd` を開き、導入済みメニューで `2` を選びます。状態確認に失敗して起動が止まる場合も復元は選べますが、復元時のハッシュ確認などは省略しません。プレビューは次のコマンドです。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Restore-NightCoop.ps1 -WhatIf

@@ -5,7 +5,7 @@ Set-StrictMode -Version Latest
 $script:SourceRoot = Split-Path -Parent $PSScriptRoot
 . "$script:SourceRoot\scripts\Common.ps1"
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-$script:TestRoot = Get-ChildPath $script:SourceRoot ('.cache\smoke-' + [Guid]::NewGuid().ToString('N'))
+$script:TestRoot = Get-ChildPath $script:SourceRoot ('scripts\.cache\smoke-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $script:TestRoot | Out-Null
 $script:FakeExe = Join-Path $script:TestRoot 'fixture.exe'
 Add-Type -TypeDefinition @'
@@ -39,16 +39,20 @@ function New-Fixture {
     $kit = Join-Path $root 'kit'
     $game = Join-Path $root 'game'
     $saves = Join-Path $root 'saves'
-    New-Item -ItemType Directory -Path "$kit\.cache", "$game\bin\x64", "$game\red4ext" -Force | Out-Null
-    Copy-Item -LiteralPath "$script:SourceRoot\scripts" -Destination "$kit\scripts" -Recurse
+    New-Item -ItemType Directory -Path "$kit\scripts\.cache", "$game\bin\x64", "$game\red4ext" -Force | Out-Null
+    # The test root is inside scripts/.cache: recursive scripts copies would copy
+    # their own destination indefinitely and include private state.
+    Get-ChildItem -LiteralPath "$script:SourceRoot\scripts" -File | Where-Object {
+        $_.Extension -eq '.ps1' -or ($_.Extension -eq '.json' -and $_.Name -ne 'config.local.json')
+    } | Copy-Item -Destination "$kit\scripts"
     Copy-Item -LiteralPath $script:FakeExe -Destination "$game\bin\x64\Cyberpunk2077.exe"
     [IO.File]::WriteAllText("$game\red4ext\LICENSE.txt", 'pre-existing loader license')
     if (-not $NoSaves) {
         New-Item -ItemType Directory -Path "$saves\ManualSave-0" -Force | Out-Null
         [IO.File]::WriteAllText("$saves\ManualSave-0\sav.dat", 'private fixture save')
     }
-    $lock = Get-Content -LiteralPath "$script:SourceRoot\nightcoop.lock.json" -Raw -Encoding UTF8 | ConvertFrom-Json
-    $archive = Join-Path "$kit\.cache" $lock.fileName
+    $lock = Get-Content -LiteralPath "$script:SourceRoot\scripts\nightcoop.lock.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+    $archive = Join-Path "$kit\scripts\.cache" $lock.fileName
     if ($ArchivePath) { Copy-Item -LiteralPath $ArchivePath -Destination $archive }
     else {
         $zip = [IO.Compression.ZipFile]::Open($archive, [IO.Compression.ZipArchiveMode]::Create)
@@ -63,12 +67,12 @@ function New-Fixture {
         $lock.sha256 = Get-Sha256 $archive
         $lock.size = (Get-Item -LiteralPath $archive).Length
     }
-    Save-Json $lock "$kit\nightcoop.lock.json"
+    Save-Json $lock "$kit\scripts\nightcoop.lock.json"
     & "$kit\scripts\Setup-NightCoop.ps1" -GamePath "$game\bin\x64\Cyberpunk2077.exe" -SavePath $saves -ConfigureOnly -NonInteractive | Out-Null
     [pscustomobject]@{ Root = $root; Kit = $kit; Game = $game; Saves = $saves; Archive = $archive; Lock = $lock }
 }
 
-foreach ($file in @(Get-ChildItem -LiteralPath "$script:SourceRoot\scripts" -Filter '*.ps1') + @(Get-Item -LiteralPath $PSCommandPath)) {
+foreach ($file in @(Get-ChildItem -LiteralPath "$script:SourceRoot\scripts" -Filter '*.ps1') + @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1')) {
     $tokens = $null; $errors = $null
     [void][Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors)
     Assert-True (-not $errors) "PowerShell parse failed: $($file.Name)"
@@ -80,7 +84,7 @@ Assert-True (-not (Test-Path -LiteralPath "$($f.Game)\bin\x64\winmm.dll")) 'What
 & "$($f.Kit)\scripts\Setup-NightCoop.ps1" -NonInteractive | Out-Null
 $check = & "$($f.Kit)\scripts\Test-Setup.ps1"
 Assert-True ($check.SavesBackedUp -eq 1) 'Existing save was not backed up'
-$receiptPath = "$($f.Kit)\local\installation.json"
+$receiptPath = "$($f.Kit)\scripts\local\installation.json"
 $receipt = Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
 Assert-True (Test-Path -LiteralPath (Join-Path $f.Kit "$($receipt.backupRelative)\saves\ManualSave-0\sav.dat")) 'Save backup is missing'
 & "$($f.Kit)\scripts\Setup-NightCoop.ps1" -NonInteractive | Out-Null
@@ -111,7 +115,7 @@ $f = New-Fixture 'no-saves' -NoSaves
 $check = & "$($f.Kit)\scripts\Test-Setup.ps1"
 Assert-True ($check.SavesBackedUp -eq 0) 'New player should have zero backed-up saves'
 Assert-True (-not (Test-Path -LiteralPath $f.Saves)) 'Installer created a source save folder'
-$receipt = Get-Content -LiteralPath "$($f.Kit)\local\installation.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+$receipt = Get-Content -LiteralPath "$($f.Kit)\scripts\local\installation.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $saveManifest = Get-Content -LiteralPath (Join-Path $f.Kit "$($receipt.backupRelative)\saves-manifest.json") -Raw -Encoding UTF8
 Assert-True ($saveManifest -match '^\s*\[\s*\]\s*$') 'Empty save manifest must be a JSON array'
 & "$($f.Kit)\scripts\Restore-NightCoop.ps1" | Out-Null
@@ -127,7 +131,7 @@ Write-Host 'PASS: unsafe ZIP and checksum rejection before game writes'
 
 $f = New-Fixture 'wrong-game-version'
 $f.Lock.gameVersion = '2.31'
-Save-Json $f.Lock "$($f.Kit)\nightcoop.lock.json"
+Save-Json $f.Lock "$($f.Kit)\scripts\nightcoop.lock.json"
 Assert-Throws { & "$($f.Kit)\scripts\Setup-NightCoop.ps1" -NonInteractive } 'This group uses game 2.31'
 Assert-True (-not (Test-Path -LiteralPath "$($f.Game)\bin\x64\winmm.dll")) 'Version mismatch changed game files'
 Write-Host 'PASS: game version mismatch and executable update detection'
@@ -143,4 +147,5 @@ if ($OfficialArchivePath) {
     & "$($f.Kit)\scripts\Restore-NightCoop.ps1" | Out-Null
     Write-Host "PASS: official pinned archive install, verification, and restore (fresh download: $Online)"
 }
+. "$PSScriptRoot\Menu.Tests.ps1"
 Write-Host "All smoke tests passed. Isolated artifacts: $script:TestRoot"
