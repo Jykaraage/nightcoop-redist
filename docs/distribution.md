@@ -12,7 +12,7 @@ RED4extとNightCoopFlightのライセンスも公式ZIPのまま導入されま�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Package.ps1
 ```
 
-`scripts/dist/NightCoop-Setup-0.2.0-beta.zip` とSHA-256ファイルが生成されます。
+`scripts/dist/NightCoop-Setup-0.2.2-beta.zip` とSHA-256ファイルが生成されます。
 ZIPを解凍すると、直下のファイルは `NightCoop.cmd` だけです。説明書・ライセンスは `docs/`、設定例・固定バージョン情報・内部PowerShellスクリプトは `scripts/` にあります。フォルダ全体を手動で圧縮せず、このパッケージを使ってください。
 `scripts/config.local.json`、`scripts/local/`、`scripts/backups/`、`scripts/.cache/`、`scripts/dist/`、`.git/` は配布対象外です。
 旧版のルートに残る個別設定・導入記録・バックアップも配布ZIPには含めません。設定例は `scripts/config.example.json` です。

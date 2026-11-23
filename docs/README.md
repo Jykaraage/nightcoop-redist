@@ -6,9 +6,11 @@
 | 全員で合わせるもの | 固定値 |
 | --- | --- |
 | Cyberpunk 2077 | **2.5**（Windows / Steam・GOG・Epic） |
-| NightCoop | **0.2.0-beta** |
-| 通信protocol | **164** |
+| NightCoop | **0.2.2-beta** |
+| 通信protocol | **201** |
 | 同梱RED4ext | **1.31.0** |
+
+旧版から更新する場合は、**これまで使っていたキットで先に復元**してから新キットでセットアップしてください。全員が0.2.2-beta（protocol 201）へ合わせる必要があります。詳しくは[導入と復元](installation.md)を参照してください。
 
 ## メンバーの導入手順
 
@@ -70,7 +72,7 @@ CMDはプロセス単位の `ExecutionPolicy Bypass` を使います。Windows�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Package.ps1
 ```
 
-`scripts/dist/NightCoop-Setup-0.2.0-beta.zip` とSHA-256ファイルが生成されます。
+`scripts/dist/NightCoop-Setup-0.2.2-beta.zip` とSHA-256ファイルが生成されます。
 配布ZIPは明示した管理ファイルだけを収録し、PCごとの設定・バックアップ・ログ・MODバイナリ・Git履歴を含めません。
 MOD本体は受け取った人のPCで[公式サイト](https://nightcoop.net/download.html)から取得します。
 
